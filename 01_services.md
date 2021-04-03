@@ -11,7 +11,7 @@ should be injected as constructor arguments because service can't function witho
 Doing it in described way allows us to use service after it was instantiated without requiring additional setup.
 
 Always try to inject what you need not where you can get it from. This helps to maintain services
-responsibility and it clearly defines its dependencies and purpose.
+responsibility, and it clearly defines its dependencies and purpose.
 
 ```php
 class FileLogger implements Logger
@@ -87,13 +87,13 @@ final class ApiClient
 }
 ```
 
-#### What if I need service and the service I retrieve from it?
+#### What if I need service, and the service I retrieve from it?
 
-In this case usually the service you retrieve from could be bundled together.
+In this usually case the service you retrieve from could be bundled together.
 Classic example for this is symfony EntityManager and Repository class.
 
 ```php
-// We use entity manager to get UserRepository which is our main depdendency.
+// We use entity manager to get UserRepository which is our main dependency.
 $user = $this->entityManager->getRepository(User:class)->find($userId);
 $this->entityManager->persit($user);
 $this->entityManager->flush();
@@ -128,8 +128,30 @@ final class BankStatmentImporter
 }
 ```
 
-Instead we can make logger required argument and if we don't need logging we can implement `NullLogger` or similar
+Instead, we can make logger required argument and if we don't need logging we can implement `NullLogger` or similar
 `Null object` pattern. 
+
+### Services should be immutable
+
+Avoid using setter injections since they make services mutable. General rule is to inject all dependencies in the
+constructor. Using setter injection makes things harder to reason about and complicates testing also services end up 
+in incomplete state. 
+
+Having object dependencies is also a first step towards making the behaviour of the service reconfigurable without 
+touching its code.
+
+```php
+final class BankStatmentImporter
+{
+    private LoggerInterface? $logger;
+
+    public function setLogger(LoggerIntergace $logger): void
+    {
+        $this->logger = $logger
+    }
+}
+```
+
 
 ## Hidden decencies
 
@@ -144,7 +166,7 @@ Sometimes dependencies are hidden because they are functions not objects. These 
 standard library of the language such as `json_encode`. Those classes are also dependencies and if they require some 
 boilerplate code to function as you expect it then it is better to wrap it into a class.
 
-For example we can wrap `json_encode` function
+For example, we can wrap `json_encode` function
 ```php
 final class JsonEncoder
 {
@@ -199,16 +221,84 @@ final class MeetupRepository
 }
 ```
 
-### Task relevant data should be passed as method arguments instead of constructor arguments
+### Constructor injection vs argument injection
+
+There are few questions that will guide your decision of injection type
+
+1. Could I run this service in a batch without requiring it to be instantiated over and over again?
+2. If memory is not wiped after each request can this service be used for subsequent requests or in needs to be reused.
+
+Services should be used to perform same job over and over again without need to re-instantiate them again. If 
+this statement is not satisfied service should be refactored.
 
 
+```php
+//BAD 
+class EntityManager
+{
+    public function __construct(
+        private object $entity
+    ) {}
+    
+    public function save(): void
+    {
+       $this->connection->save(this->entity)
+    }
+}
 
+$em = new EntityManager(obj1)
+$em->save();
+``
 
+// For each other object it should be instantiated again which is wrong.
 
+// GOOD
+```php
+class EntityManager
+{
+    public function save(object $entity): void
+    {
+      $this->connection->save(this->entity)
+    }
+}
 
+$em = new EntityManager()
+$em->save($obj1);
+$em->save($obj2);
+```
 
+## Do nothing inside a constructor
 
+Avoid doing things inside constructor because it may modify behaviour even if class/service if actually
+methods of class services are never used.
 
+## Throw an exception when argument is invalid
+
+```php
+class Alerting
+{
+    private int $level;
+    
+    public function __construct(int $level): void
+    {
+        if ($level < 0 || $level > 10) {
+            throw new InvalidArgumentException('Level shoud be between 0 and 10.');
+        }
+        
+        $this->level = $level;
+    }
+}
+
+$em = new EntityManager()
+$em->save($obj1);
+$em->save($obj2);
+```
+
+## Summary
+- Services should be created in one go.
+- All dependencies should be injected in the constructor and should be validated
+- Contextual information should be passed as an argument
+- After instantiation service should be immutable (e.g. can't change behaviour by calling it's methods like setLogger())
 
 
 
